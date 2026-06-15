@@ -102,7 +102,7 @@ input[type="checkbox"] { cursor: pointer; width: 16px; height: 16px; }
 
 <div class="header">
   <div>
-    <h1>实训平台作业辅助系统</h1>
+    <h1>Python 实训作业管理系统</h1>
     <div class="subtitle">10.10.15.23 - 仅供学习，请在24小时内移除，禁止进行违法行为</div>
   </div>
 </div>
@@ -199,7 +199,8 @@ function updateUI() {
   el('btnLogout').disabled = !STATE.loggedIn || STATE.busy;
   el('btnCrawl').disabled = !STATE.loggedIn || STATE.busy;
   el('btnGenerate').disabled = STATE.busy;
-  el('btnSubmit').disabled = !STATE.loggedIn || STATE.busy;
+  el('btnSubmitAll').disabled = !STATE.loggedIn || STATE.busy;
+  el('btnSubmitSelected').disabled = !STATE.loggedIn || STATE.busy;
 }
 
 function renderAssignments() {

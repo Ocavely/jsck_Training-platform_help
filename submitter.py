@@ -136,33 +136,41 @@ class Submitter:
                     'id': str(vals['id']),
                 })
 
-                # 等待表单提交后的导航完成（codeAssignSubmissionResult.php 处理完后会重定向）
+                # 等待表单提交后的导航完成（codeAssignSubmissionResult.php 处理完后会重定向或显示结果页）
                 try:
                     self.page.wait_for_load_state("domcontentloaded", timeout=15000)
                 except:
                     pass
-                time.sleep(1)
+                time.sleep(2)
 
-                # 导航到课程页面并手动点亮完成对勾
-                self.page.goto(COURSE_URL, wait_until="domcontentloaded", timeout=15000)
-                time.sleep(1)
-                ok = self.page.evaluate("""(id) => {
-                    var sesskey = 'QGZfWtZ3sP';
-                    try { sesskey = M.cfg.sesskey; } catch(e) {}
-                    var course = 14;
-                    var done = false;
-                    $.ajax({
-                        type: 'POST', cache: false, async: false,
-                        url: '/course/format/simplicity/sign.php',
-                        data: 'course=' + course + '&id=' + id + '&completionstate=1&sesskey=' + sesskey,
-                        dataType: 'json',
-                        success: function(data) { done = data.status == 1; },
-                        error: function() { done = false; }
-                    });
-                    return done;
-                }""", assign_id)
-                self.log(f"[+] 完成状态: {'已点亮' if ok else '失败'}")
-                time.sleep(0.5)
+                self.log(f"    结果页URL: {self.page.url}")
+
+                # 查找并点击"提交作业"按钮，完成最终提交
+                has_submit_btn = self.page.evaluate("""() => {
+                    var btn = document.getElementById('submit_assign');
+                    if (!btn) btn = document.querySelector('button[name=submit_assign]');
+                    if (!btn) btn = document.querySelector('button[id=submit_assign]');
+                    if (btn) return {exists: true, text: btn.innerText.trim(), visible: btn.offsetParent !== null};
+                    return {exists: false};
+                }""")
+
+                if has_submit_btn.get('exists'):
+                    self.log(f"    发现提交作业按钮: '{has_submit_btn.get('text')}'")
+                    try:
+                        self.page.click("button[name=submit_assign], button[id=submit_assign]", timeout=5000)
+                        self.log(f"    已点击提交作业按钮")
+                        try:
+                            self.page.wait_for_load_state("domcontentloaded", timeout=15000)
+                        except:
+                            pass
+                        time.sleep(2)
+                        self.log(f"    提交后URL: {self.page.url}")
+                    except Exception as e:
+                        self.log(f"    点击提交按钮出错: {e}")
+                        # 如果点击按钮失败，尝试直接 AJAX 提交
+                        self.log("    尝试通过 AJAX 直接提交...")
+                else:
+                    self.log("    未找到提交作业按钮，可能已自动提交")
 
                 judge_result = api_resp.get('data', {}).get('result', '')
                 if judge_result:
