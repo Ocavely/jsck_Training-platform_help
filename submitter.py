@@ -115,7 +115,6 @@ class Submitter:
             })
 
             if api_resp and api_resp.get('code') in [1, 2]:
-                # form.submit() 提交结果（正常表单提交，确保服务端完整处理）
                 self.page.evaluate("""(args) => {
                     var form = document.createElement('form');
                     form.method = 'post'; form.style.display = 'none';
@@ -136,7 +135,6 @@ class Submitter:
                     'id': str(vals['id']),
                 })
 
-                # 等待表单提交后的导航完成（codeAssignSubmissionResult.php 处理完后会重定向或显示结果页）
                 try:
                     self.page.wait_for_load_state("domcontentloaded", timeout=15000)
                 except:
@@ -145,7 +143,6 @@ class Submitter:
 
                 self.log(f"    结果页URL: {self.page.url}")
 
-                # 查找并点击"提交作业"按钮，完成最终提交
                 has_submit_btn = self.page.evaluate("""() => {
                     var btn = document.getElementById('submit_assign');
                     if (!btn) btn = document.querySelector('button[name=submit_assign]');
@@ -155,22 +152,21 @@ class Submitter:
                 }""")
 
                 if has_submit_btn.get('exists'):
-                    self.log(f"    发现提交作业按钮: '{has_submit_btn.get('text')}'")
+                    self.log(f"    提交作业: '{has_submit_btn.get('text')}'")
                     try:
                         self.page.click("button[name=submit_assign], button[id=submit_assign]", timeout=5000)
-                        self.log(f"    已点击提交作业按钮")
+                        self.log(f"    点击提交作业")
                         try:
                             self.page.wait_for_load_state("domcontentloaded", timeout=15000)
                         except:
                             pass
                         time.sleep(2)
-                        self.log(f"    提交后URL: {self.page.url}")
+                        self.log(f"    提交URL: {self.page.url}")
                     except Exception as e:
-                        self.log(f"    点击提交按钮出错: {e}")
-                        # 如果点击按钮失败，尝试直接 AJAX 提交
-                        self.log("    尝试通过 AJAX 直接提交...")
+                        self.log(f"    提交按钮出错: {e}")
+                        self.log("    尝试通过 AJAX 提交...")
                 else:
-                    self.log("    未找到提交作业按钮，可能已自动提交")
+                    self.log("    未找到提交作业按钮，可能已经提交")
 
                 judge_result = api_resp.get('data', {}).get('result', '')
                 if judge_result:
@@ -203,7 +199,6 @@ class Submitter:
             self.log(f"    -> {cn.get(status_str, status_str)}: {msg}")
             if progress_callback:
                 progress_callback(i + 1, total, assign_id, status_str, result.get("msg", ""))
-        # 最后再刷一次课程页面，确保所有状态已更新
         try:
             self.page.goto(COURSE_URL, wait_until="domcontentloaded", timeout=15000)
             time.sleep(1)
