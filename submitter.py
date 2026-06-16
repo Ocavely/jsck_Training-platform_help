@@ -12,8 +12,9 @@ def code_lang_map(lang):
 
 
 class Submitter:
-    def __init__(self, callback=None):
+    def __init__(self, callback=None, storage_file=None):
         self.callback = callback
+        self.storage_file = storage_file or STORAGE_FILE
         self._pw = None
         self.browser = None
         self.context = None
@@ -27,8 +28,8 @@ class Submitter:
     def _launch(self):
         self._pw = sync_playwright().start()
         self.browser = self._pw.chromium.launch(headless=False, channel="msedge")
-        if os.path.exists(STORAGE_FILE):
-            with open(STORAGE_FILE, "r", encoding="utf-8") as f:
+        if os.path.exists(self.storage_file):
+            with open(self.storage_file, "r", encoding="utf-8") as f:
                 state = json.load(f)
             self.context = self.browser.new_context(storage_state=state)
             self.log("[+] 从本地恢复登录态")
@@ -56,7 +57,7 @@ class Submitter:
                 if t > 300:
                     self.log("[-] 登录超时!")
                     return False
-            with open(STORAGE_FILE, "w", encoding="utf-8") as f:
+            with open(self.storage_file, "w", encoding="utf-8") as f:
                 json.dump(self.context.storage_state(), f)
             self.log("[+] 已更新本地登录态")
         self.logged_in = True

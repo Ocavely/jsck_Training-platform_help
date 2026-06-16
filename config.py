@@ -4,10 +4,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ANSWER_DIR = os.path.join(BASE_DIR, "answer")
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
+STORAGE_FILE = os.path.join(BASE_DIR, ".login_storage.json")
+ACCOUNTS_FILE = os.path.join(BASE_DIR, ".accounts.json")
 
 BASE_URL = "http://10.10.15.23"
 COURSE_URL = BASE_URL + "/course/view.php?id=14&section=3"
 SECTION3_URL = COURSE_URL
+SECTION4_URL = BASE_URL + "/course/view.php?id=14&section=4"
 
 ASSIGNMENTS = [
     (387, "387_实训作业1", "regular"),
