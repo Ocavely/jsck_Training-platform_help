@@ -112,18 +112,20 @@ class App:
         self.list_frame = ttk.LabelFrame(main_frame, text=" 作业列表 ", padding=8)
         self.list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        cols = ("select", "id", "title", "type", "status")
+        cols = ("select", "id", "title", "type", "status", "score")
         self.tree = ttk.Treeview(self.list_frame, columns=cols, show="headings", height=12)
         self.tree.heading("select", text=" ")
         self.tree.heading("id", text="ID")
         self.tree.heading("title", text="名称")
         self.tree.heading("type", text="类型")
         self.tree.heading("status", text="状态")
+        self.tree.heading("score", text="分数")
         self.tree.column("select", width=30, anchor=tk.CENTER)
         self.tree.column("id", width=50, anchor=tk.CENTER)
         self.tree.column("title", width=250)
         self.tree.column("type", width=80, anchor=tk.CENTER)
         self.tree.column("status", width=100, anchor=tk.CENTER)
+        self.tree.column("score", width=100, anchor=tk.CENTER)
 
         vsb = ttk.Scrollbar(self.list_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=vsb.set)
@@ -142,7 +144,7 @@ class App:
 
         for assign_id, title, atype in ASSIGNMENTS:
             short_type = TYPE_MAP.get(atype, atype)
-            self.tree.insert("", tk.END, values=("", assign_id, title, short_type, "待处理"),
+            self.tree.insert("", tk.END, values=("", assign_id, title, short_type, "待处理", ""),
                              tags=("pending",))
             self.assign_data[assign_id] = {"title": title, "type": atype, "status": "pending"}
 
@@ -234,9 +236,11 @@ class App:
                 elif task == "check_status_done":
                     self.check_status_btn.config(state=tk.NORMAL)
                 elif task == "check_completion":
-                    aid, completed = args
+                    aid = args[0]
+                    completed = args[1]
+                    score = args[2] if len(args) >= 3 else ""
                     st = "completed" if completed else "uncompleted"
-                    self._update_assign_status(aid, st, "已完成" if completed else "未完成")
+                    self._update_assign_status(aid, st, "已完成" if completed else "未完成", score)
                 elif task == "finished":
                     self.root.bell()
                 elif task == "refresh_ui":
@@ -262,17 +266,22 @@ class App:
             pass
         self.root.after(200, self._poll_queue)
 
-    def _update_assign_status(self, assign_id, status, msg=""):
+    def _update_assign_status(self, assign_id, status, msg="", score=""):
         label = STATUS_MAP.get(status, status)
+        if score:
+            label = f"{label} ({score})"
         data = self.assign_data if self.mode == "assign" else self.exam_assign_data
         for child in self.tree.get_children():
             vals = self.tree.item(child, "values")
             if len(vals) >= 2 and int(vals[1]) == assign_id:
                 new_vals = list(vals)
                 new_vals[4] = label
+                new_vals[5] = score
                 self.tree.item(child, values=tuple(new_vals), tags=(status,))
                 if assign_id in data:
                     data[assign_id]["status"] = status
+                    if score:
+                        data[assign_id]["score"] = score
                 break
 
     def _on_tree_click(self, event):
@@ -657,7 +666,8 @@ class App:
             info = data.get(assign_id, {})
             st = info.get("status", "pending")
             label = STATUS_MAP.get(st, st)
-            self.tree.insert("", tk.END, values=("", assign_id, title, short_type, label),
+            score_text = info.get("score", "")
+            self.tree.insert("", tk.END, values=("", assign_id, title, short_type, label, score_text),
                              tags=(st,))
 
     def _get_current_assignments(self):
@@ -813,35 +823,45 @@ class App:
 
         def task():
             try:
-                from crawler import Crawler as C
+                from status_checker import StatusChecker
                 sf = self._get_account_storage(self.current_account_id)
-                c = C(callback=lambda m: self.task_queue.put(("log", m)),
-                      storage_file=sf)
                 if not os.path.exists(sf):
                     self.task_queue.put(("log", "[-] 未找到登录态，请先登录该账号"))
                     self.task_queue.put(("check_status_done", None))
                     return
-                c._start_browser(use_storage=True)
-                login_check_url = SECTION4_URL if self.mode == "exam" else COURSE_URL
-                c.page.goto(login_check_url, wait_until="domcontentloaded", timeout=30000)
-                kw = ["oauth", "login", "authorize"]
-                if any(k in c.page.url.lower() for k in kw):
+
+                sc = StatusChecker(
+                    storage_file=sf,
+                    headless=True,
+                    callback=lambda m: self.task_queue.put(("log", m))
+                )
+                sc.start_browser(use_storage=True)
+
+                if not sc.check_login():
                     self.task_queue.put(("log", "[-] 登录态已过期，请重新登录"))
-                    c.close()
+                    sc.close()
                     self.task_queue.put(("check_status_done", None))
                     return
-                c.logged_in = True
 
                 self.task_queue.put(("log", "[*] 正在检查所有作业的完成状态..."))
                 cur = self._get_current_assignments()
                 sel = [aid for aid, _, _ in cur]
-                check_url = SECTION4_URL if self.mode == "exam" else None
-                lookup = cur if self.mode == "exam" else None
-                results = c.check_multiple_completion(sel, page_url=check_url, lookup=lookup)
-                c.close()
-                for aid, completed in results.items():
-                    self.task_queue.put(("check_completion", (aid, completed)))
-                passed = sum(1 for v in results.values() if v)
+                section_url = SECTION4_URL if self.mode == "exam" else COURSE_URL
+                url_map = self.exam_url_map if self.mode == "exam" else None
+
+                results = sc.check_all_activities(
+                    section_url=section_url,
+                    activity_ids=sel,
+                    url_map=url_map,
+                    strategy=StatusChecker.STRATEGY_BALANCED
+                )
+                sc.close()
+
+                for aid, info in results.items():
+                    completed = info.get("completed", False)
+                    score = info.get("score", "")
+                    self.task_queue.put(("check_completion", (aid, completed, score)))
+                passed = sum(1 for v in results.values() if v.get("completed"))
                 self.task_queue.put(("log", f"[+] 检查完成: {passed}/{len(sel)} 已完成"))
             except Exception as e:
                 self.task_queue.put(("log", f"[-] 检查状态出错: {e}"))
