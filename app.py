@@ -10,7 +10,7 @@ except ImportError:
 
 from config import ASSIGNMENTS, ANSWER_DIR, CACHE_DIR, LOGS_DIR, BASE_DIR, COURSE_URL, ACCOUNTS_FILE, SECTION4_URL
 from crawler import Crawler
-from answer_gen import generate_all, generate_selected
+from answer_gen import generate_all, generate_selected, generate_exam_answers
 from submitter import Submitter
 from exam_submitter import ExamSubmitter
 
@@ -796,13 +796,12 @@ class App:
         def task():
             try:
                 if self.mode == "exam":
-                    import importlib.util
-                    gen_path = os.path.join(BASE_DIR, "test", "generate_exam_answers.py")
-                    spec = importlib.util.spec_from_file_location("gen_exam", gen_path)
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)
-                    mod.main()
-                    self.task_queue.put(("log", "[+] 已生成考试答案文件 (answer1/)"))
+                    total = len(sel)
+                    def prog(cur, tot):
+                        self.task_queue.put(("progress", (cur, tot)))
+                    count = generate_exam_answers(sel, callback=prog)
+                    self.task_queue.put(("progress", (count, count)))
+                    self.task_queue.put(("log", f"[+] 已生成 {count} 个考试答案文件 (answer1/)"))
                 else:
                     total = len(sel)
                     def prog(cur, tot):
